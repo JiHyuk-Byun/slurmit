@@ -99,15 +99,26 @@ class SecretConfig(BaseModel):
 class JobRecord(BaseModel):
     """Record of a submitted job."""
 
-    local_id: str = Field(..., description="Local job ID (6-char hash)")
+    name: str = Field(..., description="Job name (primary identifier)")
     slurm_job_id: str | None = Field(default=None, description="SLURM job ID")
-    name: str = Field(..., description="Job name")
+    run_id: str | None = Field(default=None, description="Run ID (name_timestamp)")
     config_file: str | None = Field(default=None, description="Config file used")
     host: str = Field(..., description="Remote host")
-    remote_dir: str = Field(..., description="Remote working directory")
-    log_dir: str = Field(..., description="Remote log directory")
-    status: str = Field(default="SUBMITTED", description="Job status")
+    user: str = Field(..., description="SSH username")
+    queue_dir: str = Field(..., description="Remote queue directory")
+    run_dir: str | None = Field(default=None, description="Remote run directory (after execution)")
+    log_dir: str | None = Field(default=None, description="Remote log directory")
+    status: str = Field(default="QUEUED", description="Job status")
     submitted_at: str = Field(..., description="Submission timestamp")
+    started_at: str | None = Field(default=None, description="Execution start timestamp")
+    completed_at: str | None = Field(default=None, description="Completion timestamp")
     git_commit: str | None = Field(default=None, description="Git commit hash")
     git_branch: str | None = Field(default=None, description="Git branch")
+    config_hash: str | None = Field(default=None, description="Config file hash")
     command: str = Field(..., description="Executed command")
+
+    # Backward compatibility: alias for old local_id field
+    @property
+    def local_id(self) -> str:
+        """Backward compatibility: return name as local_id."""
+        return self.name

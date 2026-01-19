@@ -16,9 +16,9 @@ console = Console()
 
 
 def logs(
-    job_id: str = typer.Argument(
+    job_name: str = typer.Argument(
         ...,
-        help="Job ID (local ID or SLURM job ID)",
+        help="Job name or SLURM job ID",
     ),
     follow: bool = typer.Option(
         False,
@@ -46,22 +46,43 @@ def logs(
     ),
 ) -> None:
     """View logs for a submitted job."""
-    # Find job record
-    record = job_store.find_job_by_prefix(job_id) if len(job_id) <= 6 else None
+    # Find job record by name first
+    record = job_store.find_job_by_name(job_name)
 
     if record is None:
-        record = job_store.find_job_by_slurm_id(job_id)
+        # Try by name prefix
+        try:
+            record = job_store.find_job_by_prefix(job_name)
+        except ValueError:
+            pass
 
     if record is None:
-        console.print(f"[red]Error:[/red] Job not found: {job_id}")
+        # Try by SLURM job ID
+        record = job_store.find_job_by_slurm_id(job_name)
+
+    if record is None:
+        # Try by run ID
+        record = job_store.find_job_by_run_id(job_name)
+
+    if record is None:
+        console.print(f"[red]Error:[/red] Job not found: {job_name}")
         console.print("Use [cyan]myjob list[/cyan] to see recent jobs.")
         raise typer.Exit(1)
 
-    console.print(f"Job: [cyan]{record.name}[/cyan] ({record.local_id})")
+    console.print(f"Job: [cyan]{record.name}[/cyan]")
     console.print(f"Host: [cyan]{record.host}[/cyan]")
 
+    # Check if job has been run
+    if not record.log_dir:
+        console.print("[yellow]No log directory set.[/yellow]")
+        console.print("The job may not have been run yet.")
+        if record.status == "QUEUED":
+            console.print(f"\nRun the job first: [cyan]myjob run {record.name}[/cyan] (on server)")
+        raise typer.Exit(1)
+
     try:
-        connection = ConnectionConfig(host=record.host, user=os.environ.get("USER", ""))
+        user = record.user or os.environ.get("USER", "")
+        connection = ConnectionConfig(host=record.host, user=user)
 
         with SSHClient(connection) as ssh:
             log_monitor = LogMonitor(ssh)

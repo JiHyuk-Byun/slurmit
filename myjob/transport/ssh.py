@@ -1,13 +1,39 @@
 """SSH connection management using Fabric."""
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from fabric import Connection
 from invoke.exceptions import UnexpectedExit
+from rich.console import Console
 
 from myjob.core.models import ConnectionConfig
+
+
+console = Console()
+
+
+# User-friendly error messages
+ERROR_MESSAGES = {
+    "connection_refused": "Cannot connect to {host}. Check your network and SSH config.",
+    "auth_failed": "Authentication failed. Check your SSH key and user permissions.",
+    "timeout": "Connection timed out. The server may be unreachable.",
+    "host_not_found": "Host '{host}' not found. Check the hostname.",
+    "slurm_not_found": "SLURM not found on remote server. Is this a SLURM cluster?",
+    "config_not_found": "No config file found. Run 'myjob init' to create one.",
+    "job_not_found": "Job '{job_id}' not found. Use 'myjob list' to see recent jobs.",
+    "permission_denied": "Permission denied. Check your SSH key and user permissions.",
+}
+
+
+class SSHConnectionError(Exception):
+    """Custom exception for SSH connection errors."""
+
+    def __init__(self, message: str, original_error: Exception | None = None):
+        self.original_error = original_error
+        super().__init__(message)
 
 
 @dataclass
@@ -28,21 +54,73 @@ class SSHClient:
         self.config = config
         self._connection: Connection | None = None
 
-    def connect(self) -> Connection:
-        """Establish SSH connection."""
-        connect_kwargs: dict[str, Any] = {}
+    def connect(self, retries: int = 3, timeout: int = 30) -> Connection:
+        """Establish SSH connection with retry logic.
+
+        Args:
+            retries: Number of connection attempts
+            timeout: Connection timeout in seconds
+
+        Returns:
+            Established Connection object
+
+        Raises:
+            SSHConnectionError: If connection fails after all retries
+        """
+        connect_kwargs: dict[str, Any] = {
+            "timeout": timeout,
+        }
 
         if self.config.key_file:
             key_path = Path(self.config.key_file).expanduser()
             connect_kwargs["key_filename"] = str(key_path)
 
-        self._connection = Connection(
-            host=self.config.host,
-            user=self.config.user,
-            port=self.config.port,
-            connect_kwargs=connect_kwargs,
+        last_error: Exception | None = None
+
+        for attempt in range(retries):
+            try:
+                self._connection = Connection(
+                    host=self.config.host,
+                    user=self.config.user,
+                    port=self.config.port,
+                    connect_kwargs=connect_kwargs,
+                )
+                # Test the connection
+                self._connection.open()
+                return self._connection
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+
+                # Determine error type for user-friendly message
+                if "connection refused" in error_str:
+                    error_msg = ERROR_MESSAGES["connection_refused"].format(host=self.config.host)
+                elif "authentication" in error_str or "auth" in error_str:
+                    error_msg = ERROR_MESSAGES["auth_failed"]
+                    # Don't retry auth failures
+                    raise SSHConnectionError(error_msg, e)
+                elif "timed out" in error_str or "timeout" in error_str:
+                    error_msg = ERROR_MESSAGES["timeout"]
+                elif "name or service not known" in error_str or "nodename" in error_str:
+                    error_msg = ERROR_MESSAGES["host_not_found"].format(host=self.config.host)
+                    # Don't retry DNS failures
+                    raise SSHConnectionError(error_msg, e)
+                elif "permission denied" in error_str:
+                    error_msg = ERROR_MESSAGES["permission_denied"]
+                    raise SSHConnectionError(error_msg, e)
+                else:
+                    error_msg = f"SSH connection failed: {e}"
+
+                if attempt < retries - 1:
+                    console.print(f"[yellow]Connection failed, retrying ({attempt + 1}/{retries})...[/yellow]")
+                    time.sleep(2 ** attempt)  # Exponential backoff
+
+        # All retries exhausted
+        raise SSHConnectionError(
+            f"Failed to connect after {retries} attempts: {last_error}",
+            last_error
         )
-        return self._connection
 
     @property
     def connection(self) -> Connection:

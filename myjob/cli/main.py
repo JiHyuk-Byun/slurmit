@@ -4,7 +4,7 @@ import typer
 from rich.console import Console
 
 from myjob import __version__
-from myjob.cli.commands import init, logs, status, submit
+from myjob.cli.commands import init, logs, nodes, reproduce, run, status, submit
 
 app = typer.Typer(
     name="myjob",
@@ -14,11 +14,14 @@ console = Console()
 
 # Register subcommands
 app.command(name="submit")(submit.submit)
+app.command(name="run")(run.run)
 app.command(name="status")(status.status)
 app.command(name="logs")(logs.logs)
 app.command(name="init")(init.init)
 app.command(name="list")(status.list_jobs)
 app.command(name="cancel")(status.cancel)
+app.command(name="nodes")(nodes.nodes)
+app.command(name="reproduce")(reproduce.reproduce)
 
 
 @app.callback(invoke_without_command=True)

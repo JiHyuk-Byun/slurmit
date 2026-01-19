@@ -1,5 +1,9 @@
-"""Submit command for myjob CLI."""
+"""Submit command for myjob CLI.
 
+Transfers code and config to remote server using rsync.
+"""
+
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -7,18 +11,28 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from myjob.backend.slurm import SlurmBackend
 from myjob.core.config import find_config_file, load_config, load_secret_config
-from myjob.core.job_id import generate_job_id
-from myjob.core.models import ConnectionConfig
-from myjob.storage.job_store import create_job_record
-from myjob.transport.git_sync import GitSync, get_local_git_info, resolve_git_config
-from myjob.transport.ssh import SSHClient
+from myjob.core.metadata import create_metadata, save_metadata, save_uncommitted_patch
+from myjob.storage.job_store import create_job_record, get_job
+from myjob.transport.rsync import (
+    check_rsync_available,
+    rsync_to_server,
+    rsync_file_to_server,
+)
 
 console = Console()
 
+# Remote base directory for myjob
+MYJOB_BASE_DIR = "~/myjob"
+
 
 def submit(
+    name: str = typer.Option(
+        ...,
+        "--name",
+        "-n",
+        help="Job name (unique identifier for this experiment)",
+    ),
     config_file: Optional[str] = typer.Option(
         None,
         "--config",
@@ -37,51 +51,38 @@ def submit(
         "-u",
         help="SSH username (overrides config)",
     ),
-    partition: Optional[str] = typer.Option(
+    exclude: Optional[list[str]] = typer.Option(
         None,
-        "--partition",
-        "-p",
-        help="SLURM partition (overrides config)",
-    ),
-    gpus: Optional[int] = typer.Option(
-        None,
-        "--gpus",
-        "-g",
-        help="Number of GPUs (overrides config)",
-    ),
-    time_limit: Optional[str] = typer.Option(
-        None,
-        "--time",
-        "-t",
-        help="Time limit in HH:MM:SS (overrides config)",
-    ),
-    name: Optional[str] = typer.Option(
-        None,
-        "--name",
-        "-n",
-        help="Job name (overrides config)",
+        "--exclude",
+        "-e",
+        help="Additional patterns to exclude from rsync",
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Show what would be done without submitting",
+        help="Show what would be done without making changes",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show verbose rsync output",
     ),
 ) -> None:
-    """Submit a job to a remote SLURM cluster."""
-    # Build CLI overrides
-    cli_overrides: dict = {}
-    if host:
-        cli_overrides.setdefault("connection", {})["host"] = host
-    if user:
-        cli_overrides.setdefault("connection", {})["user"] = user
-    if partition:
-        cli_overrides.setdefault("slurm", {})["partition"] = partition
-    if gpus is not None:
-        cli_overrides.setdefault("resources", {})["gpus"] = gpus
-    if time_limit:
-        cli_overrides.setdefault("resources", {})["time"] = time_limit
-    if name:
-        cli_overrides["name"] = name
+    """Submit a job to remote server (rsync transfer).
+
+    This command:
+    1. Creates metadata (git state, config hash)
+    2. Saves uncommitted changes as a patch
+    3. Transfers code to server via rsync
+    4. Copies config and metadata files
+
+    After submit, run 'myjob run <name>' on the server to execute.
+    """
+    # Check rsync availability
+    if not check_rsync_available():
+        console.print("[red]Error:[/red] rsync is not available. Please install rsync.")
+        raise typer.Exit(1)
 
     # Find and validate config file
     config_path = find_config_file(config_file)
@@ -95,6 +96,13 @@ def submit(
 
     console.print(f"Using config: [cyan]{config_path}[/cyan]")
 
+    # Build CLI overrides
+    cli_overrides: dict = {}
+    if host:
+        cli_overrides.setdefault("connection", {})["host"] = host
+    if user:
+        cli_overrides.setdefault("connection", {})["user"] = user
+
     # Load configuration
     try:
         config = load_config(str(config_path), cli_overrides)
@@ -105,113 +113,173 @@ def submit(
     # Load secrets
     secret_config = load_secret_config()
 
-    # Merge secret env vars
-    secret_env = secret_config.env_vars
+    # Get connection details
+    remote_host = config.connection.host
+    remote_user = config.connection.user
+    ssh_key = config.connection.key_file
+    ssh_port = config.connection.port
 
-    # Get local git info if auto_detect is enabled
-    local_git_info = None
-    if config.git.auto_detect:
-        local_git_info = get_local_git_info()
-        if local_git_info:
-            console.print(f"Detected git repo: [cyan]{local_git_info.repo_root}[/cyan]")
-            console.print(f"  Branch: [cyan]{local_git_info.branch}[/cyan]")
-            console.print(f"  Commit: [cyan]{local_git_info.commit[:8]}[/cyan]")
+    # Remote paths
+    queue_dir = f"{MYJOB_BASE_DIR}/queue/{name}"
+    code_dir = f"{queue_dir}/code"
 
-            if local_git_info.has_uncommitted:
-                console.print(
-                    f"[yellow]Warning:[/yellow] {len(local_git_info.uncommitted_files)} "
-                    "uncommitted files detected"
-                )
+    # Get local project root (directory containing config file)
+    local_project_root = config_path.parent
 
-    # Resolve git config with local info
-    resolved_git = resolve_git_config(config.git, local_git_info)
+    # Create metadata
+    console.print("Creating metadata...")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
 
-    # Generate local job ID
-    local_id = generate_job_id()
-    console.print(f"Local job ID: [green]{local_id}[/green]")
+        # Create metadata with git info
+        metadata = create_metadata(name, config_path, tmpdir_path)
 
-    # Determine remote working directory
-    workspace = Path(config.workspace).expanduser()
-    job_dir = f"{workspace}/{config.name}-{local_id}"
+        # Show git info
+        if metadata.git.commit:
+            console.print(f"  Git commit: [cyan]{metadata.git.commit[:8]}[/cyan]")
+            console.print(f"  Git branch: [cyan]{metadata.git.branch}[/cyan]")
+            if metadata.git.dirty:
+                console.print("  [yellow]Uncommitted changes detected[/yellow]")
+                # Save uncommitted changes to the temp dir
+                patch_file = save_uncommitted_patch(tmpdir_path)
+                if patch_file:
+                    console.print(f"  Saved patch: [cyan]{patch_file}[/cyan]")
 
-    if dry_run:
-        console.print("\n[yellow]Dry run mode - no changes will be made[/yellow]")
-        console.print(Panel.fit(
-            f"[bold]Job Configuration[/bold]\n"
-            f"Name: {config.name}\n"
-            f"Host: {config.connection.host}\n"
-            f"User: {config.connection.user}\n"
-            f"Partition: {config.slurm.partition}\n"
-            f"Resources: {config.resources.nodes} nodes, "
-            f"{config.resources.cpus_per_task} CPUs, "
-            f"{config.resources.gpus} GPUs\n"
-            f"Time: {config.resources.time}\n"
-            f"Command: {config.execution.command}\n"
-            f"Remote dir: {job_dir}",
-            title="Dry Run",
-        ))
-        raise typer.Exit(0)
+        console.print(f"  Config hash: [cyan]{metadata.config_hash}[/cyan]")
 
-    # Connect to remote
-    console.print(f"\nConnecting to [cyan]{config.connection.host}[/cyan]...")
+        # Save metadata to temp dir
+        save_metadata(metadata, tmpdir_path)
 
-    try:
-        with SSHClient(config.connection) as ssh:
-            # Verify SLURM is available
-            try:
-                slurm_version = ssh.check_slurm_version()
-                console.print(f"SLURM: [green]{slurm_version}[/green]")
-            except RuntimeError as e:
-                console.print(f"[red]Error:[/red] {e}")
-                raise typer.Exit(1)
+        if dry_run:
+            console.print("\n[yellow]Dry run mode - no changes will be made[/yellow]")
+            console.print(Panel.fit(
+                f"[bold]Job Submission Preview[/bold]\n"
+                f"Name: {name}\n"
+                f"Host: {remote_host}\n"
+                f"User: {remote_user}\n"
+                f"Source: {local_project_root}\n"
+                f"Destination: {remote_user}@{remote_host}:{queue_dir}\n"
+                f"Command: {config.execution.command}",
+                title="Dry Run",
+            ))
 
-            # Sync git repository if configured
-            if resolved_git.repo_url:
-                console.print(f"Syncing repository to [cyan]{job_dir}[/cyan]...")
-                git_sync = GitSync(ssh, resolved_git)
-                try:
-                    git_sync.clone_or_update(job_dir)
-                    console.print("[green]Repository synced[/green]")
-                except RuntimeError as e:
-                    console.print(f"[red]Error syncing repository:[/red] {e}")
-                    raise typer.Exit(1)
-            else:
-                # Just create the directory
-                ssh.ensure_directory(job_dir)
-
-            # Prepare workspace and submit
-            console.print("Preparing job submission...")
-            slurm_backend = SlurmBackend(ssh, config)
-
-            script_path = slurm_backend.prepare_workspace(job_dir, secret_env)
-            console.print(f"Script: [cyan]{script_path}[/cyan]")
-
-            console.print("Submitting job...")
-            submit_result = slurm_backend.submit(script_path)
-
-            console.print(
-                f"\n[green]Job submitted successfully![/green]\n"
-                f"  SLURM Job ID: [bold]{submit_result.slurm_job_id}[/bold]\n"
-                f"  Local ID: [bold]{local_id}[/bold]"
+            # Show rsync dry-run
+            console.print("\n[bold]Rsync dry-run:[/bold]")
+            result = rsync_to_server(
+                local_path=local_project_root,
+                remote_host=remote_host,
+                remote_path=code_dir,
+                user=remote_user,
+                exclude=exclude,
+                dry_run=True,
+                verbose=True,
+                ssh_key=ssh_key,
+                port=ssh_port,
             )
+            if result.stdout:
+                console.print(result.stdout)
+            raise typer.Exit(0)
 
-            # Save job record
-            create_job_record(
-                local_id=local_id,
-                name=config.name,
-                host=config.connection.host,
-                remote_dir=job_dir,
-                log_dir=submit_result.log_dir,
-                command=config.execution.command,
-                config_file=str(config_path) if config_path else None,
-                slurm_job_id=submit_result.slurm_job_id,
-                git_commit=resolved_git.commit,
-                git_branch=resolved_git.branch,
+        # Transfer code via rsync
+        console.print(f"\nSyncing code to [cyan]{remote_host}:{code_dir}[/cyan]...")
+        result = rsync_to_server(
+            local_path=local_project_root,
+            remote_host=remote_host,
+            remote_path=code_dir,
+            user=remote_user,
+            exclude=exclude,
+            delete=True,
+            verbose=verbose,
+            ssh_key=ssh_key,
+            port=ssh_port,
+        )
+
+        if not result.success:
+            console.print(f"[red]Error:[/red] rsync failed: {result.stderr}")
+            raise typer.Exit(1)
+
+        if verbose and result.stdout:
+            console.print(result.stdout)
+        console.print("[green]Code synced successfully[/green]")
+
+        # Transfer config file
+        console.print("Transferring config file...")
+        result = rsync_file_to_server(
+            local_file=config_path,
+            remote_host=remote_host,
+            remote_path=f"{queue_dir}/myjob.yaml",
+            user=remote_user,
+            ssh_key=ssh_key,
+            port=ssh_port,
+        )
+        if not result.success:
+            console.print(f"[red]Error:[/red] Failed to transfer config: {result.stderr}")
+            raise typer.Exit(1)
+
+        # Transfer metadata.json
+        console.print("Transferring metadata...")
+        metadata_file = tmpdir_path / "metadata.json"
+        result = rsync_file_to_server(
+            local_file=metadata_file,
+            remote_host=remote_host,
+            remote_path=f"{queue_dir}/metadata.json",
+            user=remote_user,
+            ssh_key=ssh_key,
+            port=ssh_port,
+        )
+        if not result.success:
+            console.print(f"[red]Error:[/red] Failed to transfer metadata: {result.stderr}")
+            raise typer.Exit(1)
+
+        # Transfer uncommitted.patch if exists
+        patch_file = tmpdir_path / "uncommitted.patch"
+        if patch_file.exists():
+            result = rsync_file_to_server(
+                local_file=patch_file,
+                remote_host=remote_host,
+                remote_path=f"{queue_dir}/uncommitted.patch",
+                user=remote_user,
+                ssh_key=ssh_key,
+                port=ssh_port,
             )
+            if not result.success:
+                console.print(f"[yellow]Warning:[/yellow] Failed to transfer patch: {result.stderr}")
 
-            console.print(f"\nTo check status: [cyan]myjob status {local_id}[/cyan]")
-            console.print(f"To view logs: [cyan]myjob logs {local_id}[/cyan]")
+        # Transfer secret.yaml if exists
+        secret_path = config_path.parent / "secret.yaml"
+        if secret_path.exists():
+            console.print("Transferring secrets...")
+            result = rsync_file_to_server(
+                local_file=secret_path,
+                remote_host=remote_host,
+                remote_path=f"{queue_dir}/secret.yaml",
+                user=remote_user,
+                ssh_key=ssh_key,
+                port=ssh_port,
+            )
+            if not result.success:
+                console.print(f"[yellow]Warning:[/yellow] Failed to transfer secrets: {result.stderr}")
 
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+    # Save job record locally
+    create_job_record(
+        name=name,
+        host=remote_host,
+        user=remote_user,
+        queue_dir=queue_dir,
+        command=config.execution.command,
+        config_file=str(config_path),
+        git_commit=metadata.git.commit if metadata.git.commit else None,
+        git_branch=metadata.git.branch if metadata.git.branch else None,
+        config_hash=metadata.config_hash,
+    )
+
+    console.print(
+        f"\n[green]Job submitted successfully![/green]\n"
+        f"  Name: [bold]{name}[/bold]\n"
+        f"  Remote: [cyan]{remote_host}:{queue_dir}[/cyan]"
+    )
+
+    console.print(f"\n[bold]Next steps:[/bold]")
+    console.print(f"  1. SSH to server: [cyan]ssh {remote_user}@{remote_host}[/cyan]")
+    console.print(f"  2. Run the job:   [cyan]myjob run {name}[/cyan]")
+    console.print(f"\nOr check status:    [cyan]myjob status {name}[/cyan]")
