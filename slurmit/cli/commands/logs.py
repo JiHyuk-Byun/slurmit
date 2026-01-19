@@ -1,4 +1,4 @@
-"""Logs command for myjob CLI."""
+"""Logs command for slurmit CLI."""
 
 import os
 import sys
@@ -7,10 +7,10 @@ from typing import Optional
 import typer
 from rich.console import Console
 
-from myjob.core.models import ConnectionConfig
-from myjob.monitor.logs import LogMonitor
-from myjob.storage import job_store
-from myjob.transport.ssh import SSHClient
+from slurmit.core.models import ConnectionConfig
+from slurmit.monitor.logs import LogMonitor
+from slurmit.storage import job_store
+from slurmit.transport.ssh import SSHClient
 
 console = Console()
 
@@ -66,7 +66,7 @@ def logs(
 
     if record is None:
         console.print(f"[red]Error:[/red] Job not found: {job_name}")
-        console.print("Use [cyan]myjob list[/cyan] to see recent jobs.")
+        console.print("Use [cyan]slurmit list[/cyan] to see recent jobs.")
         raise typer.Exit(1)
 
     console.print(f"Job: [cyan]{record.name}[/cyan]")
@@ -77,7 +77,7 @@ def logs(
         console.print("[yellow]No log directory set.[/yellow]")
         console.print("The job may not have been run yet.")
         if record.status == "QUEUED":
-            console.print(f"\nRun the job first: [cyan]myjob run {record.name}[/cyan] (on server)")
+            console.print(f"\nRun the job first: [cyan]slurmit run {record.name}[/cyan] (on server)")
         raise typer.Exit(1)
 
     try:

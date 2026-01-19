@@ -1,1 +1,1 @@
-"""Tests for myjob."""
+"""Tests for slurmit."""

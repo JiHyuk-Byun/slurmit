@@ -1,4 +1,4 @@
-"""Nodes command for myjob CLI.
+"""Nodes command for slurmit CLI.
 
 Shows cluster node and GPU status.
 """
@@ -10,9 +10,9 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from myjob.core.models import ConnectionConfig
-from myjob.monitor.nodes import NodeMonitor, LocalNodeMonitor
-from myjob.transport.ssh import SSHClient
+from slurmit.core.models import ConnectionConfig
+from slurmit.monitor.nodes import NodeMonitor, LocalNodeMonitor
+from slurmit.transport.ssh import SSHClient
 
 console = Console()
 

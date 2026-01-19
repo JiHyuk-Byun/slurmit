@@ -1,4 +1,4 @@
-"""Submit command for myjob CLI.
+"""Submit command for slurmit CLI.
 
 Transfers code and config to remote server using rsync.
 """
@@ -11,10 +11,10 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from myjob.core.config import find_config_file, load_config, load_secret_config
-from myjob.core.metadata import create_metadata, save_metadata, save_uncommitted_patch
-from myjob.storage.job_store import create_job_record, get_job
-from myjob.transport.rsync import (
+from slurmit.core.config import find_config_file, load_config, load_secret_config
+from slurmit.core.metadata import create_metadata, save_metadata, save_uncommitted_patch
+from slurmit.storage.job_store import create_job_record, get_job
+from slurmit.transport.rsync import (
     check_rsync_available,
     rsync_to_server,
     rsync_file_to_server,
@@ -22,8 +22,8 @@ from myjob.transport.rsync import (
 
 console = Console()
 
-# Remote base directory for myjob
-MYJOB_BASE_DIR = "~/myjob"
+# Remote base directory for slurmit
+MYJOB_BASE_DIR = "~/slurmit"
 
 
 def submit(
@@ -37,7 +37,7 @@ def submit(
         None,
         "--config",
         "-c",
-        help="Path to configuration file (default: myjob.yaml)",
+        help="Path to configuration file (default: slurmit.yaml)",
     ),
     host: Optional[str] = typer.Option(
         None,
@@ -77,7 +77,7 @@ def submit(
     3. Transfers code to server via rsync
     4. Copies config and metadata files
 
-    After submit, run 'myjob run <name>' on the server to execute.
+    After submit, run 'slurmit run <name>' on the server to execute.
     """
     # Check rsync availability
     if not check_rsync_available():
@@ -89,9 +89,9 @@ def submit(
     if config_path is None:
         console.print(
             "[red]Error:[/red] No configuration file found. "
-            "Create myjob.yaml or use --config to specify one."
+            "Create slurmit.yaml or use --config to specify one."
         )
-        console.print("Run [cyan]myjob init[/cyan] to create a sample configuration.")
+        console.print("Run [cyan]slurmit init[/cyan] to create a sample configuration.")
         raise typer.Exit(1)
 
     console.print(f"Using config: [cyan]{config_path}[/cyan]")
@@ -207,7 +207,7 @@ def submit(
         result = rsync_file_to_server(
             local_file=config_path,
             remote_host=remote_host,
-            remote_path=f"{queue_dir}/myjob.yaml",
+            remote_path=f"{queue_dir}/slurmit.yaml",
             user=remote_user,
             ssh_key=ssh_key,
             port=ssh_port,
@@ -281,5 +281,5 @@ def submit(
 
     console.print(f"\n[bold]Next steps:[/bold]")
     console.print(f"  1. SSH to server: [cyan]ssh {remote_user}@{remote_host}[/cyan]")
-    console.print(f"  2. Run the job:   [cyan]myjob run {name}[/cyan]")
-    console.print(f"\nOr check status:    [cyan]myjob status {name}[/cyan]")
+    console.print(f"  2. Run the job:   [cyan]slurmit run {name}[/cyan]")
+    console.print(f"\nOr check status:    [cyan]slurmit status {name}[/cyan]")

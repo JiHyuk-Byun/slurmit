@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
 
-from myjob.core.models import JobConfig
-from myjob.transport.ssh import SSHClient
+from slurmit.core.models import JobConfig
+from slurmit.transport.ssh import SSHClient
 
 
 @dataclass
@@ -110,7 +110,7 @@ class SlurmBackend:
 
     def generate_env_script(self, extra_env: dict[str, str] | None = None) -> str:
         """Generate environment setup script."""
-        lines = ["#!/bin/bash", "# Environment variables for myjob", ""]
+        lines = ["#!/bin/bash", "# Environment variables for slurmit", ""]
 
         # From config
         for key, value in self.config.execution.env_vars.items():

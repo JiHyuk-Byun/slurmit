@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from myjob.transport.ssh import SSHClient
+from slurmit.transport.ssh import SSHClient
 
 
 class JobState(Enum):

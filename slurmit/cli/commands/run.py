@@ -1,4 +1,4 @@
-"""Run command for myjob CLI (server-side).
+"""Run command for slurmit CLI (server-side).
 
 Executes a queued job by moving it to runs/ and submitting to SLURM.
 """
@@ -13,18 +13,18 @@ from typing import Optional
 import typer
 from rich.console import Console
 
-from myjob.backend.slurm import SlurmBackend
-from myjob.core.config import load_config, load_secret_config
-from myjob.monitor.status import JobState, StatusMonitor
+from slurmit.backend.slurm import SlurmBackend
+from slurmit.core.config import load_config, load_secret_config
+from slurmit.monitor.status import JobState, StatusMonitor
 
 console = Console()
 
-# Base directory for myjob on server
-MYJOB_BASE_DIR = Path.home() / "myjob"
+# Base directory for slurmit on server
+MYJOB_BASE_DIR = Path.home() / "slurmit"
 
 
 def ensure_base_directories() -> None:
-    """Ensure myjob base directories exist."""
+    """Ensure slurmit base directories exist."""
     (MYJOB_BASE_DIR / "queue").mkdir(parents=True, exist_ok=True)
     (MYJOB_BASE_DIR / "runs").mkdir(parents=True, exist_ok=True)
     (MYJOB_BASE_DIR / "active").mkdir(parents=True, exist_ok=True)
@@ -90,8 +90,8 @@ def wait_for_completion(
     Returns:
         Final job state
     """
-    from myjob.transport.ssh import SSHClient
-    from myjob.core.models import ConnectionConfig
+    from slurmit.transport.ssh import SSHClient
+    from slurmit.core.models import ConnectionConfig
 
     # For local execution, create a dummy SSH connection to localhost
     # In practice, we're running locally, so we use subprocess
@@ -189,9 +189,9 @@ def run(
     """Run a queued job (server-side command).
 
     This command:
-    1. Checks that the job exists in ~/myjob/queue/
-    2. Moves it to ~/myjob/runs/<job_name>_<timestamp>/
-    3. Creates symlink in ~/myjob/active/
+    1. Checks that the job exists in ~/slurmit/queue/
+    2. Moves it to ~/slurmit/runs/<job_name>_<timestamp>/
+    3. Creates symlink in ~/slurmit/active/
     4. Generates and submits sbatch script
     """
     # Ensure base directories exist
@@ -202,11 +202,11 @@ def run(
     if not queue_dir.exists():
         console.print(f"[red]Error:[/red] Job '{job_name}' not found in queue")
         console.print(f"  Queue directory: {queue_dir}")
-        console.print("\nUse [cyan]myjob list --queue[/cyan] to see available jobs.")
+        console.print("\nUse [cyan]slurmit list --queue[/cyan] to see available jobs.")
         raise typer.Exit(1)
 
     # Check for required files
-    config_file = queue_dir / "myjob.yaml"
+    config_file = queue_dir / "slurmit.yaml"
     code_dir = queue_dir / "code"
 
     if not config_file.exists():
@@ -382,7 +382,7 @@ def list_queue() -> None:
     console.print("[bold]Queued jobs:[/bold]")
     for job in sorted(jobs):
         job_dir = queue_base / job
-        config_exists = (job_dir / "myjob.yaml").exists()
+        config_exists = (job_dir / "slurmit.yaml").exists()
         code_exists = (job_dir / "code").exists()
         status = "[green]ready[/green]" if (config_exists and code_exists) else "[yellow]incomplete[/yellow]"
         console.print(f"  {job} {status}")

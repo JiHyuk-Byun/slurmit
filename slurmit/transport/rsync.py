@@ -1,4 +1,4 @@
-"""Rsync-based file transfer for myjob.
+"""Rsync-based file transfer for slurmit.
 
 Provides efficient file synchronization between local and remote hosts.
 """

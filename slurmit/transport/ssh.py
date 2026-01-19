@@ -9,7 +9,7 @@ from fabric import Connection
 from invoke.exceptions import UnexpectedExit
 from rich.console import Console
 
-from myjob.core.models import ConnectionConfig
+from slurmit.core.models import ConnectionConfig
 
 
 console = Console()
@@ -22,8 +22,8 @@ ERROR_MESSAGES = {
     "timeout": "Connection timed out. The server may be unreachable.",
     "host_not_found": "Host '{host}' not found. Check the hostname.",
     "slurm_not_found": "SLURM not found on remote server. Is this a SLURM cluster?",
-    "config_not_found": "No config file found. Run 'myjob init' to create one.",
-    "job_not_found": "Job '{job_id}' not found. Use 'myjob list' to see recent jobs.",
+    "config_not_found": "No config file found. Run 'slurmit init' to create one.",
+    "job_not_found": "Job '{job_id}' not found. Use 'slurmit list' to see recent jobs.",
     "permission_denied": "Permission denied. Check your SSH key and user permissions.",
 }
 

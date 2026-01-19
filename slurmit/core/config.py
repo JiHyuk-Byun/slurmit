@@ -1,11 +1,11 @@
-"""Configuration loading and merging for myjob."""
+"""Configuration loading and merging for slurmit."""
 
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from myjob.core.models import JobConfig, SecretConfig
+from slurmit.core.models import JobConfig, SecretConfig
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -33,8 +33,8 @@ def find_config_file(config_path: str | None = None) -> Path | None:
 
     Search order:
     1. Explicit path if provided
-    2. myjob.yaml in current directory
-    3. myjob.yml in current directory
+    2. slurmit.yaml in current directory
+    3. slurmit.yml in current directory
     """
     if config_path:
         path = Path(config_path)
@@ -42,7 +42,7 @@ def find_config_file(config_path: str | None = None) -> Path | None:
             return path
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
-    for name in ["myjob.yaml", "myjob.yml"]:
+    for name in ["slurmit.yaml", "slurmit.yml"]:
         path = Path.cwd() / name
         if path.exists():
             return path
@@ -55,13 +55,13 @@ def find_secret_file() -> Path | None:
 
     Search order:
     1. secret.yaml in current directory
-    2. ~/.myjob/secret.yaml (global)
+    2. ~/.slurmit/secret.yaml (global)
     """
     local_secret = Path.cwd() / "secret.yaml"
     if local_secret.exists():
         return local_secret
 
-    global_secret = Path.home() / ".myjob" / "secret.yaml"
+    global_secret = Path.home() / ".slurmit" / "secret.yaml"
     if global_secret.exists():
         return global_secret
 
@@ -85,7 +85,7 @@ def load_config(
 
     Priority (highest to lowest):
     1. CLI arguments
-    2. myjob.yaml
+    2. slurmit.yaml
     3. secret.yaml
     4. Defaults
     """
@@ -98,7 +98,7 @@ def load_config(
         secret_data = load_yaml_file(secret_path)
         merged_config = deep_merge(merged_config, secret_data)
 
-    # Load myjob.yaml
+    # Load slurmit.yaml
     config_file = find_config_file(config_path)
     if config_file:
         config_data = load_yaml_file(config_file)
@@ -115,7 +115,7 @@ def load_config(
 def get_defaults() -> dict[str, Any]:
     """Return default configuration values."""
     return {
-        "name": "myjob",
+        "name": "slurmit",
         "slurm": {
             "partition": "default",
         },
@@ -136,13 +136,13 @@ def get_defaults() -> dict[str, Any]:
             "stderr": "job_%j.err",
             "log_dir": "logs",
         },
-        "workspace": "~/myjob-workspace",
+        "workspace": "~/slurmit-workspace",
     }
 
 
 def create_sample_config() -> str:
-    """Generate a sample myjob.yaml configuration."""
-    return """# myjob configuration file
+    """Generate a sample slurmit.yaml configuration."""
+    return """# slurmit configuration file
 name: my-experiment
 
 # Connection settings (can also be in secret.yaml)
@@ -194,7 +194,7 @@ output:
   log_dir: logs
 
 # Workspace directory on remote
-workspace: ~/myjob-workspace
+workspace: ~/slurmit-workspace
 """
 
 

@@ -1,4 +1,4 @@
-"""Status command for myjob CLI."""
+"""Status command for slurmit CLI."""
 
 import os
 from pathlib import Path
@@ -8,15 +8,15 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from myjob.core.models import ConnectionConfig
-from myjob.monitor.status import JobState, StatusMonitor
-from myjob.storage import job_store
-from myjob.transport.ssh import SSHClient
+from slurmit.core.models import ConnectionConfig
+from slurmit.monitor.status import JobState, StatusMonitor
+from slurmit.storage import job_store
+from slurmit.transport.ssh import SSHClient
 
 console = Console()
 
 # Remote base directory
-MYJOB_BASE_DIR = Path.home() / "myjob"
+MYJOB_BASE_DIR = Path.home() / "slurmit"
 
 
 def _get_state_style(state: JobState) -> str:
@@ -83,7 +83,7 @@ def status(
 
     if record is None:
         console.print(f"[red]Error:[/red] Job not found: {job_name}")
-        console.print("Use [cyan]myjob list[/cyan] to see recent jobs.")
+        console.print("Use [cyan]slurmit list[/cyan] to see recent jobs.")
         raise typer.Exit(1)
 
     console.print(f"Job: [cyan]{record.name}[/cyan]")
@@ -194,7 +194,7 @@ def list_jobs(
 
     if not records:
         console.print("No jobs found.")
-        console.print("Submit a job with [cyan]myjob submit -n <name>[/cyan]")
+        console.print("Submit a job with [cyan]slurmit submit -n <name>[/cyan]")
         return
 
     table = Table(title="Recent Jobs")
@@ -238,7 +238,7 @@ def _list_queue() -> None:
 
     for job in sorted(jobs):
         job_dir = queue_base / job
-        config_exists = (job_dir / "myjob.yaml").exists()
+        config_exists = (job_dir / "slurmit.yaml").exists()
         code_exists = (job_dir / "code").exists()
 
         status = "[green]ready[/green]" if (config_exists and code_exists) else "[yellow]incomplete[/yellow]"
@@ -248,7 +248,7 @@ def _list_queue() -> None:
         table.add_row(job, status, config_str, code_str)
 
     console.print(table)
-    console.print(f"\nTo run a job: [cyan]myjob run <name>[/cyan]")
+    console.print(f"\nTo run a job: [cyan]slurmit run <name>[/cyan]")
 
 
 def _list_runs(limit: int = 20) -> None:

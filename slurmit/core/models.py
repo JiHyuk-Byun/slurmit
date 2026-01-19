@@ -1,4 +1,4 @@
-"""Pydantic models for myjob configuration."""
+"""Pydantic models for slurmit configuration."""
 
 from pathlib import Path
 from typing import Any
@@ -70,14 +70,14 @@ class OutputConfig(BaseModel):
 class JobConfig(BaseModel):
     """Complete job configuration combining all sub-configs."""
 
-    name: str = Field(default="myjob", description="Job name")
+    name: str = Field(default="slurmit", description="Job name")
     connection: ConnectionConfig
     slurm: SlurmConfig = Field(default_factory=SlurmConfig)
     resources: ResourceConfig = Field(default_factory=ResourceConfig)
     git: GitConfig = Field(default_factory=GitConfig)
     execution: ExecutionConfig
     output: OutputConfig = Field(default_factory=OutputConfig)
-    workspace: str = Field(default="~/myjob-workspace", description="Remote workspace directory")
+    workspace: str = Field(default="~/slurmit-workspace", description="Remote workspace directory")
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "JobConfig":

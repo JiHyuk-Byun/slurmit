@@ -1,11 +1,11 @@
-"""Git synchronization for myjob."""
+"""Git synchronization for slurmit."""
 
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from myjob.core.models import GitConfig
-from myjob.transport.ssh import SSHClient
+from slurmit.core.models import GitConfig
+from slurmit.transport.ssh import SSHClient
 
 
 @dataclass

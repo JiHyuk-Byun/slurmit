@@ -1,4 +1,4 @@
-"""Local job ID generation for myjob."""
+"""Local job ID generation for slurmit."""
 
 import hashlib
 import time

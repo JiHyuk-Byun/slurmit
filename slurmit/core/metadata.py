@@ -1,4 +1,4 @@
-"""Metadata generation for myjob experiments.
+"""Metadata generation for slurmit experiments.
 
 Captures git state, config hash, and submission info for reproducibility.
 """

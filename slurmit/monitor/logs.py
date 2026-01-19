@@ -4,8 +4,8 @@ import time
 from dataclasses import dataclass
 from typing import Iterator
 
-from myjob.core.models import JobRecord
-from myjob.transport.ssh import SSHClient
+from slurmit.core.models import JobRecord
+from slurmit.transport.ssh import SSHClient
 
 
 @dataclass

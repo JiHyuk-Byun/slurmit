@@ -1,13 +1,13 @@
-"""Main CLI entry point for myjob."""
+"""Main CLI entry point for slurmit."""
 
 import typer
 from rich.console import Console
 
-from myjob import __version__
-from myjob.cli.commands import init, logs, nodes, reproduce, run, status, submit
+from slurmit import __version__
+from slurmit.cli.commands import init, logs, nodes, reproduce, run, status, submit
 
 app = typer.Typer(
-    name="myjob",
+    name="slurmit",
     help="CLI tool for submitting and managing SLURM jobs on remote clusters.",
 )
 console = Console()
@@ -34,9 +34,9 @@ def main(
         help="Show version and exit.",
     ),
 ) -> None:
-    """myjob - Submit and manage SLURM jobs on remote clusters."""
+    """slurmit - Submit and manage SLURM jobs on remote clusters."""
     if version:
-        console.print(f"myjob version {__version__}")
+        console.print(f"slurmit version {__version__}")
         raise typer.Exit()
     if ctx.invoked_subcommand is None:
         console.print(ctx.get_help())

@@ -1,4 +1,4 @@
-# myjob
+# slurmit
 
 CLI tool for submitting and managing SLURM jobs on remote clusters.
 
@@ -7,13 +7,13 @@ CLI tool for submitting and managing SLURM jobs on remote clusters.
 ```
 LOCAL (User's PC)              SERVER (SLURM Cluster)
 ─────────────────              ─────────────────────
-myjob submit ─── rsync ──────→ ~/myjob/queue/
-                               myjob run ──→ sbatch
+slurmit submit ─── rsync ────→ ~/slurmit/queue/
+                               slurmit run ──→ sbatch
 ```
 
 **Key Design:**
-- `myjob submit` runs locally: transfers code via rsync
-- `myjob run` runs on server: submits job to SLURM
+- `slurmit submit` runs locally: transfers code via rsync
+- `slurmit run` runs on server: submits job to SLURM
 - No git push required - direct file transfer
 - Experiment versioning with git state capture
 
@@ -28,20 +28,20 @@ pip install -e .
 
 ```bash
 # 1. Create configuration
-myjob init
+slurmit init
 
-# 2. Edit myjob.yaml with your settings
+# 2. Edit slurmit.yaml with your settings
 
 # 3. Submit from local (transfers code to server)
-myjob submit -n my-experiment
+slurmit submit -n my-experiment
 
 # 4. SSH to server and run
 ssh user@cluster
-myjob run my-experiment
+slurmit run my-experiment
 
 # 5. Check status (from local or server)
-myjob status my-experiment
-myjob logs my-experiment -f
+slurmit status my-experiment
+slurmit logs my-experiment -f
 ```
 
 ## Commands
@@ -49,41 +49,41 @@ myjob logs my-experiment -f
 ### Local Commands
 
 ```bash
-myjob submit -n <name>        # Transfer code+config to server
-myjob submit -n <name> --dry-run
-myjob status <name>           # Check job status
-myjob logs <name> -f          # View logs (follow mode)
-myjob list                    # List submitted jobs
-myjob cancel <name>           # Cancel a running job
+slurmit submit -n <name>        # Transfer code+config to server
+slurmit submit -n <name> --dry-run
+slurmit status <name>           # Check job status
+slurmit logs <name> -f          # View logs (follow mode)
+slurmit list                    # List submitted jobs
+slurmit cancel <name>           # Cancel a running job
 ```
 
 ### Server Commands
 
 ```bash
-myjob run <name>              # Run a queued job
-myjob run <name> -w           # Run and wait for completion
-myjob run <name> -f           # Run and follow logs
-myjob list --queue            # List queued jobs
-myjob list --runs             # List run history
-myjob nodes                   # Show cluster node/GPU status
-myjob nodes -p gpu            # Filter by partition
-myjob reproduce <run_id>      # Reproduce a past experiment
+slurmit run <name>              # Run a queued job
+slurmit run <name> -w           # Run and wait for completion
+slurmit run <name> -f           # Run and follow logs
+slurmit list --queue            # List queued jobs
+slurmit list --runs             # List run history
+slurmit nodes                   # Show cluster node/GPU status
+slurmit nodes -p gpu            # Filter by partition
+slurmit reproduce <run_id>      # Reproduce a past experiment
 ```
 
 ## Server Directory Structure
 
 ```
-~/myjob/
+~/slurmit/
 ├── queue/                        # Pending jobs (after submit)
 │   └── my-exp/
 │       ├── code/                 # Synced source code
-│       ├── myjob.yaml            # Experiment config
+│       ├── slurmit.yaml          # Experiment config
 │       └── metadata.json         # Version info (auto-generated)
 │
 ├── runs/                         # Execution history
 │   ├── my-exp_20240119_143022/   # With timestamp
 │   │   ├── code/
-│   │   ├── myjob.yaml
+│   │   ├── slurmit.yaml
 │   │   ├── metadata.json
 │   │   └── logs/
 │   └── my-exp_20240119_150512/
@@ -94,7 +94,7 @@ myjob reproduce <run_id>      # Reproduce a past experiment
 
 ## Configuration
 
-### myjob.yaml
+### slurmit.yaml
 
 ```yaml
 name: my-experiment
@@ -141,10 +141,10 @@ Each experiment automatically captures:
 
 ```bash
 # View metadata
-cat ~/myjob/runs/my-exp_20240119_143022/metadata.json
+cat ~/slurmit/runs/my-exp_20240119_143022/metadata.json
 
 # Reproduce a past experiment
-myjob reproduce my-exp_20240119_143022
+slurmit reproduce my-exp_20240119_143022
 ```
 
 ### metadata.json Example
@@ -169,7 +169,7 @@ myjob reproduce my-exp_20240119_143022
 
 ```bash
 # Show cluster status
-myjob nodes
+slurmit nodes
 
 # Example output:
 CLUSTER STATUS
@@ -192,19 +192,19 @@ GPU Summary:
 # Local: develop and test code
 
 # Local: submit experiment
-myjob submit -n train-v1 --exclude "data/*"
+slurmit submit -n train-v1 --exclude "data/*"
 
 # Server: check queue and run
 ssh cluster
-myjob list --queue
-myjob run train-v1 -w
+slurmit list --queue
+slurmit run train-v1 -w
 
 # Local: monitor progress
-myjob status train-v1
-myjob logs train-v1 -f
+slurmit status train-v1
+slurmit logs train-v1 -f
 
 # Later: reproduce the experiment
-myjob reproduce train-v1_20240119_143022
+slurmit reproduce train-v1_20240119_143022
 ```
 
 ## License

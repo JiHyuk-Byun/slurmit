@@ -1,4 +1,4 @@
-"""Reproduce command for myjob CLI.
+"""Reproduce command for slurmit CLI.
 
 Reproduces a past experiment from its metadata.
 """
@@ -13,12 +13,12 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from myjob.core.metadata import JobMetadata, load_metadata
+from slurmit.core.metadata import JobMetadata, load_metadata
 
 console = Console()
 
-# Base directory for myjob on server
-MYJOB_BASE_DIR = Path.home() / "myjob"
+# Base directory for slurmit on server
+MYJOB_BASE_DIR = Path.home() / "slurmit"
 
 
 def reproduce(
@@ -68,7 +68,7 @@ def reproduce(
             raise typer.Exit(1)
         else:
             console.print(f"[red]Error:[/red] Run not found: {run_id}")
-            console.print("\nUse [cyan]myjob list --runs[/cyan] to see available runs.")
+            console.print("\nUse [cyan]slurmit list --runs[/cyan] to see available runs.")
             raise typer.Exit(1)
 
     console.print(f"Found run: [cyan]{run_id}[/cyan]")
@@ -118,14 +118,14 @@ def reproduce(
 
     if dry_run:
         console.print("\n[yellow]Dry run mode - showing reproduction steps:[/yellow]")
-        console.print(f"\n1. Create new queue entry: ~/myjob/queue/{job_name}/")
+        console.print(f"\n1. Create new queue entry: ~/slurmit/queue/{job_name}/")
         console.print(f"2. Copy code from: {run_dir}/code/")
         if metadata.git.commit:
             console.print(f"3. Checkout git commit: {metadata.git.commit[:8]}")
         if has_patch and apply_patch:
             console.print(f"4. Apply patch: {patch_file}")
         console.print(f"5. Copy config files")
-        console.print(f"\nAfter reproduction, run: [cyan]myjob run {job_name}[/cyan]")
+        console.print(f"\nAfter reproduction, run: [cyan]slurmit run {job_name}[/cyan]")
         raise typer.Exit(0)
 
     # Create new queue directory
@@ -191,7 +191,7 @@ def reproduce(
 
     # Copy config files
     console.print("Copying config files...")
-    config_files = ["myjob.yaml", "secret.yaml", "metadata.json"]
+    config_files = ["slurmit.yaml", "secret.yaml", "metadata.json"]
     for cf in config_files:
         src = run_dir / cf
         if src.exists():
@@ -209,5 +209,5 @@ def reproduce(
         f"\n[green]Reproduction ready![/green]\n"
         f"  Queue dir: {queue_dir}\n"
         f"\nTo run the reproduced experiment:\n"
-        f"  [cyan]myjob run {job_name}[/cyan]"
+        f"  [cyan]slurmit run {job_name}[/cyan]"
     )

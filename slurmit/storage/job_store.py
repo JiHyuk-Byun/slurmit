@@ -7,12 +7,12 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from myjob.core.models import JobRecord
+from slurmit.core.models import JobRecord
 
 
 def get_jobs_dir() -> Path:
     """Get the directory for storing job records."""
-    jobs_dir = Path.home() / ".myjob" / "jobs"
+    jobs_dir = Path.home() / ".slurmit" / "jobs"
     jobs_dir.mkdir(parents=True, exist_ok=True)
     return jobs_dir
 

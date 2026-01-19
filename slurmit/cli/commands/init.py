@@ -1,4 +1,4 @@
-"""Init command for myjob CLI - interactive configuration file generation."""
+"""Init command for slurmit CLI - interactive configuration file generation."""
 
 from pathlib import Path
 from typing import Optional
@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
-from myjob.core.config import create_sample_config, create_sample_secret
+from slurmit.core.config import create_sample_config, create_sample_secret
 
 console = Console()
 
@@ -27,17 +27,17 @@ def init(
         help="Create minimal configuration without interactive prompts",
     ),
 ) -> None:
-    """Initialize configuration files for myjob.
+    """Initialize configuration files for slurmit.
 
-    Creates myjob.yaml and optionally secret.yaml in the current directory.
+    Creates slurmit.yaml and optionally secret.yaml in the current directory.
     """
-    config_path = Path.cwd() / "myjob.yaml"
+    config_path = Path.cwd() / "slurmit.yaml"
     secret_path = Path.cwd() / "secret.yaml"
 
     # Check for existing files
     if config_path.exists() and not force:
         if not Confirm.ask(
-            f"[yellow]myjob.yaml already exists. Overwrite?[/yellow]"
+            f"[yellow]slurmit.yaml already exists. Overwrite?[/yellow]"
         ):
             console.print("Aborted.")
             raise typer.Exit(0)
@@ -59,7 +59,7 @@ def init(
 
     # Interactive configuration
     console.print(Panel.fit(
-        "[bold]myjob Configuration Setup[/bold]\n"
+        "[bold]slurmit Configuration Setup[/bold]\n"
         "This wizard will help you create configuration files.",
         title="Welcome",
     ))
@@ -83,8 +83,8 @@ def init(
     command = Prompt.ask("Default command", default="python train.py")
 
     console.print("\n[bold]Job Settings[/bold]")
-    job_name = Prompt.ask("Default job name", default="myjob")
-    workspace = Prompt.ask("Remote workspace directory", default="~/myjob-workspace")
+    job_name = Prompt.ask("Default job name", default="slurmit")
+    workspace = Prompt.ask("Remote workspace directory", default="~/slurmit-workspace")
 
     # Generate configuration
     config_content = _generate_config(
@@ -130,19 +130,19 @@ def init(
             if "secret.yaml" not in gitignore_content:
                 if Confirm.ask("Add secret.yaml to .gitignore?", default=True):
                     with open(gitignore_path, "a") as f:
-                        f.write("\n# myjob secrets\nsecret.yaml\n")
+                        f.write("\n# slurmit secrets\nsecret.yaml\n")
                     console.print("[green]Added secret.yaml to .gitignore[/green]")
         else:
             if Confirm.ask("Create .gitignore with secret.yaml?", default=True):
                 with open(gitignore_path, "w") as f:
-                    f.write("# myjob secrets\nsecret.yaml\n")
+                    f.write("# slurmit secrets\nsecret.yaml\n")
                 console.print(f"[green]Created:[/green] {gitignore_path}")
 
     console.print("\n[bold green]Setup complete![/bold green]")
     console.print("Next steps:")
-    console.print("  1. Edit [cyan]myjob.yaml[/cyan] to configure your job")
+    console.print("  1. Edit [cyan]slurmit.yaml[/cyan] to configure your job")
     console.print("  2. Add API keys to [cyan]secret.yaml[/cyan] if needed")
-    console.print("  3. Run [cyan]myjob submit[/cyan] to submit a job")
+    console.print("  3. Run [cyan]slurmit submit[/cyan] to submit a job")
 
 
 def _generate_config(
@@ -160,7 +160,7 @@ def _generate_config(
 ) -> str:
     """Generate configuration file content."""
     lines = [
-        "# myjob configuration file",
+        "# slurmit configuration file",
         f"name: {job_name}",
         "",
         "# Connection settings",

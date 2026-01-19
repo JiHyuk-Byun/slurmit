@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from myjob.transport.ssh import SSHClient
+from slurmit.transport.ssh import SSHClient
 
 
 @dataclass
