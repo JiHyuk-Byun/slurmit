@@ -53,11 +53,11 @@ def jobs(
         "-n",
         help="Filter by node",
     ),
-    all_users: bool = typer.Option(
+    mine: bool = typer.Option(
         False,
-        "--all",
-        "-a",
-        help="Show all users' jobs (default shows only current user)",
+        "--mine",
+        "-m",
+        help="Show only my jobs",
     ),
     host: Optional[str] = typer.Option(
         None,
@@ -79,18 +79,22 @@ def jobs(
 ) -> None:
     """Show running SLURM jobs on the cluster.
 
-    By default, shows only your jobs. Use --all to see all users' jobs.
+    By default, shows all jobs with your jobs highlighted.
+    Use --mine to show only your jobs.
     """
     # Determine if we should use local or remote
     use_local = local or (not host)
 
+    # Get current user for highlighting
+    current_user = os.environ.get("USER", "")
+
     # Determine user filter
-    if all_users:
-        filter_user = None  # Show all users
+    if mine:
+        filter_user = current_user  # Show only my jobs
     elif user:
         filter_user = user  # Use specified user
     else:
-        filter_user = os.environ.get("USER", "")  # Default to current user
+        filter_user = None  # Show all jobs (default)
 
     if use_local:
         # Use local SLURM commands
@@ -102,16 +106,15 @@ def jobs(
         )
 
         if not job_list:
-            if filter_user and not all_users:
+            if filter_user:
                 console.print(f"[yellow]No jobs found for user '{filter_user}'.[/yellow]")
-                console.print("Use [cyan]--all[/cyan] to see all users' jobs.")
             else:
                 console.print("[yellow]No jobs found.[/yellow]")
             console.print("Make sure you're on a SLURM cluster or use --host for remote query.")
             raise typer.Exit(0)
     else:
         # Use SSH for remote query
-        remote_user = ssh_user or os.environ.get("USER", "")
+        remote_user = ssh_user or current_user
 
         if not remote_user:
             console.print("[red]Error:[/red] SSH username required. Use --ssh-user or set USER env var.")
@@ -131,17 +134,15 @@ def jobs(
             raise typer.Exit(1)
 
         if not job_list:
-            if filter_user and not all_users:
+            if filter_user:
                 console.print(f"[yellow]No jobs found for user '{filter_user}'.[/yellow]")
-                console.print("Use [cyan]--all[/cyan] to see all users' jobs.")
             else:
                 console.print("[yellow]No jobs found.[/yellow]")
             raise typer.Exit(0)
 
     # Display jobs table
     table = Table(title="RUNNING JOBS")
-    table.add_column("JOB ID", style="cyan")
-    table.add_column("USER")
+    table.add_column("JOB ID")
     table.add_column("NAME")
     table.add_column("STATE")
     table.add_column("PARTITION")
@@ -150,22 +151,34 @@ def jobs(
     table.add_column("TIME")
     table.add_column("LIMIT")
 
+    my_jobs = 0
     for job in job_list:
         state_style = _get_state_style(job.state)
+        is_mine = job.user == current_user
+
+        if is_mine:
+            my_jobs += 1
 
         # Format GPU string
         gpu_str = job.gpus if job.gpus and job.gpus != "-" else "-"
 
+        # Highlight my jobs with cyan, others dimmed
+        if is_mine:
+            job_id_str = f"[cyan bold]{job.job_id}[/cyan bold]"
+            name_str = f"[cyan]{job.name[:20] if len(job.name) > 20 else job.name}[/cyan]"
+        else:
+            job_id_str = f"[dim]{job.job_id}[/dim]"
+            name_str = f"[dim]{job.name[:20] if len(job.name) > 20 else job.name}[/dim]"
+
         table.add_row(
-            job.job_id,
-            job.user,
-            job.name[:20] if len(job.name) > 20 else job.name,  # Truncate long names
+            job_id_str,
+            name_str,
             f"[{state_style}]{job.state.value}[/{state_style}]",
-            job.partition,
-            job.nodes or "-",
-            gpu_str,
-            job.elapsed,
-            job.time_limit,
+            job.partition if is_mine else f"[dim]{job.partition}[/dim]",
+            job.nodes or "-" if is_mine else f"[dim]{job.nodes or '-'}[/dim]",
+            gpu_str if is_mine else f"[dim]{gpu_str}[/dim]",
+            job.elapsed if is_mine else f"[dim]{job.elapsed}[/dim]",
+            job.time_limit if is_mine else f"[dim]{job.time_limit}[/dim]",
         )
 
     console.print(table)
@@ -175,3 +188,5 @@ def jobs(
     running = sum(1 for j in job_list if j.state == JobState.RUNNING)
     pending = sum(1 for j in job_list if j.state == JobState.PENDING)
     console.print(f"Total: {len(job_list)} jobs ([green]{running} running[/green], [yellow]{pending} pending[/yellow])")
+    if my_jobs > 0:
+        console.print(f"My jobs: [cyan]{my_jobs}[/cyan]")
