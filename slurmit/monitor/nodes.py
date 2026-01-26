@@ -161,11 +161,9 @@ class NodeMonitor:
 
         output = result.stdout
 
-        # Parse Gres and GresUsed fields
-        # Example: Gres=gpu:a100:4
-        # Example: GresUsed=gpu:a100:2(IDX:0-1)
+        # Parse Gres field for total GPUs
+        # Example: Gres=gpu:RTX3090:8 or Gres=gpu:a100:4
         gres_match = re.search(r"Gres=gpu:(\w+):(\d+)", output)
-        gres_used_match = re.search(r"GresUsed=gpu:(\w+):(\d+)", output)
 
         if not gres_match:
             # Try alternative format: Gres=gpu:4
@@ -173,25 +171,25 @@ class NodeMonitor:
             if gres_match:
                 total = int(gres_match.group(1))
                 gpu_type = "gpu"
+            else:
+                return None
+        else:
+            gpu_type = gres_match.group(1)
+            total = int(gres_match.group(2))
 
-                # Get used count
-                gres_used_match = re.search(r"GresUsed=gpu:(\d+)", output)
-                used = int(gres_used_match.group(1)) if gres_used_match else 0
-
-                return GPUInfo(
-                    gpu_type=gpu_type,
-                    total=total,
-                    used=used,
-                    free=total - used,
-                )
-            return None
-
-        gpu_type = gres_match.group(1)
-        total = int(gres_match.group(2))
-
+        # Parse AllocTRES for used GPUs
+        # Example: AllocTRES=cpu=92,gres/gpu=8,gres/gpu:rtx3090=8
         used = 0
-        if gres_used_match:
-            used = int(gres_used_match.group(2))
+
+        # Try specific GPU type first: gres/gpu:rtx3090=8
+        alloc_match = re.search(r"gres/gpu:\w+=(\d+)", output)
+        if alloc_match:
+            used = int(alloc_match.group(1))
+        else:
+            # Try generic format: gres/gpu=8
+            alloc_match = re.search(r"gres/gpu=(\d+)", output)
+            if alloc_match:
+                used = int(alloc_match.group(1))
 
         return GPUInfo(
             gpu_type=gpu_type,
@@ -358,22 +356,35 @@ class LocalNodeMonitor:
 
         output = result.stdout
 
-        # Parse Gres field
+        # Parse Gres field for total GPUs
+        # Example: Gres=gpu:RTX3090:8 or Gres=gpu:a100:4
         gres_match = re.search(r"Gres=gpu:(\w+):(\d+)", output)
-        gres_used_match = re.search(r"GresUsed=gpu:(\w+):(\d+)", output)
 
         if not gres_match:
+            # Try alternative format: Gres=gpu:4
             gres_match = re.search(r"Gres=gpu:(\d+)", output)
             if gres_match:
                 total = int(gres_match.group(1))
-                gres_used_match = re.search(r"GresUsed=gpu:(\d+)", output)
-                used = int(gres_used_match.group(1)) if gres_used_match else 0
-                return GPUInfo(gpu_type="gpu", total=total, used=used, free=total - used)
-            return None
+                gpu_type = "gpu"
+            else:
+                return None
+        else:
+            gpu_type = gres_match.group(1)
+            total = int(gres_match.group(2))
 
-        gpu_type = gres_match.group(1)
-        total = int(gres_match.group(2))
-        used = int(gres_used_match.group(2)) if gres_used_match else 0
+        # Parse AllocTRES for used GPUs
+        # Example: AllocTRES=cpu=92,gres/gpu=8,gres/gpu:rtx3090=8
+        used = 0
+
+        # Try specific GPU type first: gres/gpu:rtx3090=8
+        alloc_match = re.search(r"gres/gpu:\w+=(\d+)", output)
+        if alloc_match:
+            used = int(alloc_match.group(1))
+        else:
+            # Try generic format: gres/gpu=8
+            alloc_match = re.search(r"gres/gpu=(\d+)", output)
+            if alloc_match:
+                used = int(alloc_match.group(1))
 
         return GPUInfo(gpu_type=gpu_type, total=total, used=used, free=total - used)
 
