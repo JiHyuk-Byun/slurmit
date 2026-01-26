@@ -1,5 +1,6 @@
 """Job status monitoring using SLURM commands."""
 
+import subprocess
 from dataclasses import dataclass
 from enum import Enum
 
@@ -44,6 +45,21 @@ class JobStatus:
     start_time: str | None
     end_time: str | None
     exit_code: str | None
+
+
+@dataclass
+class JobInfo:
+    """Full job information including user and GPUs."""
+
+    job_id: str
+    user: str
+    name: str
+    state: JobState
+    partition: str
+    nodes: str | None
+    gpus: str
+    elapsed: str
+    time_limit: str
 
 
 class StatusMonitor:
@@ -179,3 +195,111 @@ class StatusMonitor:
             JobState.NODE_FAIL,
             JobState.OUT_OF_MEMORY,
         )
+
+    def list_all_jobs(
+        self,
+        user: str | None = None,
+        partition: str | None = None,
+        node: str | None = None,
+    ) -> list[JobInfo]:
+        """List all running/pending jobs with full details including GPUs.
+
+        Args:
+            user: Filter by specific user
+            partition: Filter by partition
+            node: Filter by specific node
+        """
+        # squeue format: JobID, User, Name, State, Partition, NodeList, GRES, Elapsed, TimeLimit
+        cmd = 'squeue -h -o "%i|%u|%j|%T|%P|%N|%b|%M|%l"'
+        if user:
+            cmd += f" -u {user}"
+        if partition:
+            cmd += f" -p {partition}"
+        if node:
+            cmd += f" -w {node}"
+
+        result = self.ssh.run(cmd, warn=True)
+        if not result.ok or not result.stdout.strip():
+            return []
+
+        jobs = []
+        for line in result.stdout.strip().split("\n"):
+            if not line.strip():
+                continue
+
+            parts = line.split("|")
+            if len(parts) < 9:
+                continue
+
+            jobs.append(
+                JobInfo(
+                    job_id=parts[0],
+                    user=parts[1],
+                    name=parts[2],
+                    state=JobState.from_string(parts[3]),
+                    partition=parts[4],
+                    nodes=parts[5] if parts[5] else None,
+                    gpus=parts[6] if parts[6] else "-",
+                    elapsed=parts[7],
+                    time_limit=parts[8],
+                )
+            )
+
+        return jobs
+
+
+class LocalStatusMonitor:
+    """Status monitor for local execution (no SSH required)."""
+
+    def list_all_jobs(
+        self,
+        user: str | None = None,
+        partition: str | None = None,
+        node: str | None = None,
+    ) -> list[JobInfo]:
+        """List all running/pending jobs using local SLURM commands.
+
+        Args:
+            user: Filter by specific user
+            partition: Filter by partition
+            node: Filter by specific node
+        """
+        cmd = ["squeue", "-h", "-o", "%i|%u|%j|%T|%P|%N|%b|%M|%l"]
+        if user:
+            cmd.extend(["-u", user])
+        if partition:
+            cmd.extend(["-p", partition])
+        if node:
+            cmd.extend(["-w", node])
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                return []
+        except FileNotFoundError:
+            return []
+
+        jobs = []
+        for line in result.stdout.strip().split("\n"):
+            if not line.strip():
+                continue
+
+            parts = line.split("|")
+            if len(parts) < 9:
+                continue
+
+            jobs.append(
+                JobInfo(
+                    job_id=parts[0],
+                    user=parts[1],
+                    name=parts[2],
+                    state=JobState.from_string(parts[3]),
+                    partition=parts[4],
+                    nodes=parts[5] if parts[5] else None,
+                    gpus=parts[6] if parts[6] else "-",
+                    elapsed=parts[7],
+                    time_limit=parts[8],
+                )
+            )
+
+        return jobs

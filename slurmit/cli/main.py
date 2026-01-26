@@ -4,7 +4,7 @@ import typer
 from rich.console import Console
 
 from slurmit import __version__
-from slurmit.cli.commands import init, logs, nodes, reproduce, run, status, submit
+from slurmit.cli.commands import init, jobs, logs, nodes, reproduce, run, status, submit
 
 app = typer.Typer(
     name="slurmit",
@@ -21,6 +21,7 @@ app.command(name="init")(init.init)
 app.command(name="list")(status.list_jobs)
 app.command(name="cancel")(status.cancel)
 app.command(name="nodes")(nodes.nodes)
+app.command(name="jobs")(jobs.jobs)
 app.command(name="reproduce")(reproduce.reproduce)
 
 
