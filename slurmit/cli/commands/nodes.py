@@ -111,6 +111,7 @@ def nodes(
     table.add_column("NODE", style="cyan")
     table.add_column("STATE")
     table.add_column("PARTITION")
+    table.add_column("CPU (used/total)")
     table.add_column("GPU (free/total)")
     table.add_column("VRAM")
     table.add_column("BUSY FOR")
@@ -138,6 +139,7 @@ def nodes(
             node.name,
             f"[{state_style}]{node.state}[/{state_style}]",
             node.partition,
+            node.cpu_usage_str,
             gpu_str,
             vram_str,
             busy_str,
