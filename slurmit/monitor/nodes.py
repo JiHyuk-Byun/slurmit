@@ -93,6 +93,7 @@ class NodeInfo:
     cpus_used: int  # CPUs in use
     memory_total: str  # Total memory (e.g., "256G")
     gpu: Optional[GPUInfo]  # GPU info if available
+    last_busy_time: Optional[str] = None  # LastBusyTime from scontrol
 
     @property
     def cpus_free(self) -> int:
@@ -103,6 +104,33 @@ class NodeInfo:
     def cpu_usage_str(self) -> str:
         """Return CPU usage as 'used/total' string."""
         return f"{self.cpus_used}/{self.cpus_total}"
+
+    @property
+    def busy_duration(self) -> Optional[str]:
+        """Calculate how long the node has been busy."""
+        if not self.last_busy_time or self.state.lower() == "idle":
+            return None
+
+        from datetime import datetime
+
+        try:
+            # Parse LastBusyTime (format: 2026-01-22T16:56:41)
+            last_busy = datetime.strptime(self.last_busy_time, "%Y-%m-%dT%H:%M:%S")
+            now = datetime.now()
+            delta = now - last_busy
+
+            days = delta.days
+            hours, remainder = divmod(delta.seconds, 3600)
+            minutes, _ = divmod(remainder, 60)
+
+            if days > 0:
+                return f"{days}d {hours}h"
+            elif hours > 0:
+                return f"{hours}h {minutes}m"
+            else:
+                return f"{minutes}m"
+        except (ValueError, TypeError):
+            return None
 
 
 class NodeMonitor:
@@ -160,8 +188,8 @@ class NodeMonitor:
             # Convert memory to human-readable format
             memory_str = self._format_memory(memory)
 
-            # Get GPU info for this node
-            gpu_info = self._get_gpu_info(node_name)
+            # Get GPU info and LastBusyTime for this node
+            gpu_info, last_busy_time = self._get_node_details(node_name)
 
             nodes.append(NodeInfo(
                 name=node_name,
@@ -171,6 +199,7 @@ class NodeMonitor:
                 cpus_used=cpus_used,
                 memory_total=memory_str,
                 gpu=gpu_info,
+                last_busy_time=last_busy_time,
             ))
 
         return nodes
@@ -208,18 +237,27 @@ class NodeMonitor:
         except ValueError:
             return memory
 
-    def _get_gpu_info(self, node_name: str) -> Optional[GPUInfo]:
-        """Get GPU information for a specific node.
+    def _get_node_details(self, node_name: str) -> tuple[Optional[GPUInfo], Optional[str]]:
+        """Get GPU information and LastBusyTime for a specific node.
 
-        Uses scontrol to query GRES (Generic RESource) information.
+        Uses scontrol to query node details.
+
+        Returns:
+            Tuple of (GPUInfo or None, LastBusyTime or None)
         """
         cmd = f"scontrol show node {node_name}"
         result = self.ssh.run(cmd, warn=True)
 
         if not result.ok or not result.stdout:
-            return None
+            return None, None
 
         output = result.stdout
+
+        # Parse LastBusyTime
+        last_busy_time = None
+        busy_match = re.search(r"LastBusyTime=(\S+)", output)
+        if busy_match:
+            last_busy_time = busy_match.group(1)
 
         # Parse Gres field for total GPUs
         # Example: Gres=gpu:RTX3090:8 or Gres=gpu:a100:4
@@ -232,7 +270,7 @@ class NodeMonitor:
                 total = int(gres_match.group(1))
                 gpu_type = "gpu"
             else:
-                return None
+                return None, last_busy_time
         else:
             gpu_type = gres_match.group(1)
             total = int(gres_match.group(2))
@@ -254,13 +292,15 @@ class NodeMonitor:
         # Get GPU memory from lookup table
         memory_gb = get_gpu_memory(gpu_type)
 
-        return GPUInfo(
+        gpu_info = GPUInfo(
             gpu_type=gpu_type,
             total=total,
             used=used,
             free=total - used,
             memory_gb=memory_gb,
         )
+
+        return gpu_info, last_busy_time
 
     def get_summary(self) -> dict:
         """Get a summary of cluster GPU resources.
@@ -388,8 +428,8 @@ class LocalNodeMonitor:
             except ValueError:
                 memory_str = memory
 
-            # Get GPU info
-            gpu_info = self._get_gpu_info_local(node_name)
+            # Get GPU info and LastBusyTime
+            gpu_info, last_busy_time = self._get_node_details_local(node_name)
 
             nodes.append(NodeInfo(
                 name=node_name,
@@ -399,12 +439,17 @@ class LocalNodeMonitor:
                 cpus_used=cpus_used,
                 memory_total=memory_str,
                 gpu=gpu_info,
+                last_busy_time=last_busy_time,
             ))
 
         return nodes
 
-    def _get_gpu_info_local(self, node_name: str) -> Optional[GPUInfo]:
-        """Get GPU info using local scontrol command."""
+    def _get_node_details_local(self, node_name: str) -> tuple[Optional[GPUInfo], Optional[str]]:
+        """Get GPU info and LastBusyTime using local scontrol command.
+
+        Returns:
+            Tuple of (GPUInfo or None, LastBusyTime or None)
+        """
         import subprocess
 
         try:
@@ -414,11 +459,17 @@ class LocalNodeMonitor:
                 text=True,
             )
             if result.returncode != 0:
-                return None
+                return None, None
         except FileNotFoundError:
-            return None
+            return None, None
 
         output = result.stdout
+
+        # Parse LastBusyTime
+        last_busy_time = None
+        busy_match = re.search(r"LastBusyTime=(\S+)", output)
+        if busy_match:
+            last_busy_time = busy_match.group(1)
 
         # Parse Gres field for total GPUs
         # Example: Gres=gpu:RTX3090:8 or Gres=gpu:a100:4
@@ -431,7 +482,7 @@ class LocalNodeMonitor:
                 total = int(gres_match.group(1))
                 gpu_type = "gpu"
             else:
-                return None
+                return None, last_busy_time
         else:
             gpu_type = gres_match.group(1)
             total = int(gres_match.group(2))
@@ -453,7 +504,8 @@ class LocalNodeMonitor:
         # Get GPU memory from lookup table
         memory_gb = get_gpu_memory(gpu_type)
 
-        return GPUInfo(gpu_type=gpu_type, total=total, used=used, free=total - used, memory_gb=memory_gb)
+        gpu_info = GPUInfo(gpu_type=gpu_type, total=total, used=used, free=total - used, memory_gb=memory_gb)
+        return gpu_info, last_busy_time
 
     def get_summary(self) -> dict:
         """Get cluster summary."""

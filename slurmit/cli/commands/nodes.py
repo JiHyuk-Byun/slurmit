@@ -111,10 +111,9 @@ def nodes(
     table.add_column("NODE", style="cyan")
     table.add_column("STATE")
     table.add_column("PARTITION")
-    table.add_column("CPU (used/total)")
-    table.add_column("MEMORY")
     table.add_column("GPU (free/total)")
     table.add_column("VRAM")
+    table.add_column("BUSY FOR")
 
     for node in node_list:
         state_style = _get_state_style(node.state)
@@ -130,14 +129,18 @@ def nodes(
             else:
                 gpu_str = f"[dim]{gpu_str}[/dim]"
 
+        # Busy duration (only show if node is not idle)
+        busy_str = "-"
+        if node.busy_duration:
+            busy_str = f"[yellow]{node.busy_duration}[/yellow]"
+
         table.add_row(
             node.name,
             f"[{state_style}]{node.state}[/{state_style}]",
             node.partition,
-            node.cpu_usage_str,
-            node.memory_total,
             gpu_str,
             vram_str,
+            busy_str,
         )
 
     console.print(table)
