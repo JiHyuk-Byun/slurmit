@@ -7,6 +7,58 @@ from typing import Optional
 from slurmit.transport.ssh import SSHClient
 
 
+# GPU memory lookup table (in GB)
+# Add more GPU models as needed
+GPU_MEMORY_GB = {
+    # NVIDIA A-series
+    "a100": 80,
+    "a6000": 48,
+    "a5000": 24,
+    "a4000": 16,
+    "a2000": 6,
+    # NVIDIA RTX series
+    "rtx3090": 24,
+    "rtx3080": 10,
+    "rtx3070": 8,
+    "rtx4090": 24,
+    "rtx4080": 16,
+    "rtx6000ada": 48,
+    "rtxpro6000": 48,
+    # NVIDIA Quadro/Pro
+    "quadro": 48,
+    # NVIDIA V-series
+    "v100": 32,
+    # NVIDIA H-series
+    "h100": 80,
+    # Default
+    "gpu": 0,
+}
+
+
+def get_gpu_memory(gpu_type: str) -> int:
+    """Get GPU memory in GB for a given GPU type.
+
+    Args:
+        gpu_type: GPU type string (e.g., 'RTX3090', 'a100')
+
+    Returns:
+        Memory in GB, or 0 if unknown
+    """
+    # Normalize: lowercase and remove common prefixes/suffixes
+    normalized = gpu_type.lower().replace("-", "").replace("_", "").replace(" ", "")
+
+    # Direct match
+    if normalized in GPU_MEMORY_GB:
+        return GPU_MEMORY_GB[normalized]
+
+    # Partial match
+    for key, value in GPU_MEMORY_GB.items():
+        if key in normalized or normalized in key:
+            return value
+
+    return 0
+
+
 @dataclass
 class GPUInfo:
     """GPU information for a node."""
@@ -15,11 +67,19 @@ class GPUInfo:
     total: int  # Total GPUs on node
     used: int  # GPUs currently in use
     free: int  # Available GPUs
+    memory_gb: int = 0  # GPU memory in GB
 
     @property
     def usage_str(self) -> str:
         """Return usage as 'free/total (type)' string."""
         return f"{self.free}/{self.total} ({self.gpu_type})"
+
+    @property
+    def memory_str(self) -> str:
+        """Return memory as string like '48GB' or '-' if unknown."""
+        if self.memory_gb > 0:
+            return f"{self.memory_gb}GB"
+        return "-"
 
 
 @dataclass
@@ -191,11 +251,15 @@ class NodeMonitor:
             if alloc_match:
                 used = int(alloc_match.group(1))
 
+        # Get GPU memory from lookup table
+        memory_gb = get_gpu_memory(gpu_type)
+
         return GPUInfo(
             gpu_type=gpu_type,
             total=total,
             used=used,
             free=total - used,
+            memory_gb=memory_gb,
         )
 
     def get_summary(self) -> dict:
@@ -386,7 +450,10 @@ class LocalNodeMonitor:
             if alloc_match:
                 used = int(alloc_match.group(1))
 
-        return GPUInfo(gpu_type=gpu_type, total=total, used=used, free=total - used)
+        # Get GPU memory from lookup table
+        memory_gb = get_gpu_memory(gpu_type)
+
+        return GPUInfo(gpu_type=gpu_type, total=total, used=used, free=total - used, memory_gb=memory_gb)
 
     def get_summary(self) -> dict:
         """Get cluster summary."""

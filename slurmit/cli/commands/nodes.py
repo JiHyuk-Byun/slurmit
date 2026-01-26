@@ -114,13 +114,16 @@ def nodes(
     table.add_column("CPU (used/total)")
     table.add_column("MEMORY")
     table.add_column("GPU (free/total)")
+    table.add_column("VRAM")
 
     for node in node_list:
         state_style = _get_state_style(node.state)
 
         gpu_str = "-"
+        vram_str = "-"
         if node.gpu:
             gpu_str = node.gpu.usage_str
+            vram_str = node.gpu.memory_str
             # Color GPU availability
             if node.gpu.free > 0:
                 gpu_str = f"[green]{gpu_str}[/green]"
@@ -134,6 +137,7 @@ def nodes(
             node.cpu_usage_str,
             node.memory_total,
             gpu_str,
+            vram_str,
         )
 
     console.print(table)
@@ -154,8 +158,11 @@ def nodes(
 
         if summary.get("gpus_by_type"):
             console.print()
+            from slurmit.monitor.nodes import get_gpu_memory
             for gpu_type, counts in sorted(summary["gpus_by_type"].items()):
+                mem = get_gpu_memory(gpu_type)
+                mem_str = f" ({mem}GB)" if mem > 0 else ""
                 console.print(
-                    f"  {gpu_type.upper()}: "
+                    f"  {gpu_type.upper()}{mem_str}: "
                     f"[green]{counts['free']}[/green]/{counts['total']} available"
                 )
