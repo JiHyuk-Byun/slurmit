@@ -85,9 +85,12 @@ def jobs(
     use_local = local or (not host)
 
     # Determine user filter
-    filter_user = user
-    if not all_users and not user:
-        filter_user = os.environ.get("USER", "")
+    if all_users:
+        filter_user = None  # Show all users
+    elif user:
+        filter_user = user  # Use specified user
+    else:
+        filter_user = os.environ.get("USER", "")  # Default to current user
 
     if use_local:
         # Use local SLURM commands
